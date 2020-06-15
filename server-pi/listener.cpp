@@ -47,7 +47,6 @@ namespace zftp {
 
     Listener::~Listener() {
         close(listenerSocket);
-        std::cout << "Listener destructor" << std::endl;
         for (auto& thread: listeningThreads){
             if (thread.joinable()) {
                 thread.join();
@@ -59,8 +58,8 @@ namespace zftp {
     //own mutex on the socket vector. But since the owner of the Listener object
     //has to check for thread errors manually, forcing them to pass in a mutex
     //is a good reminder that Listener handles threads
-    void Listener::addListener(int writePipe, std::unordered_map<int, User>& clientsList, std::shared_timed_mutex& mutex) {
-        listeningThreads.push_back(std::thread(&Listener::_blockingListen, this, std::ref(writePipe), std::ref(clientsList), std::ref(mutex)));
+    void Listener::addListener(const int alertPipe, std::unordered_map<int, User>& clientsList, std::shared_timed_mutex& mutex) {
+        listeningThreads.push_back(std::thread(&Listener::_blockingListen, this, alertPipe, std::ref(clientsList), std::ref(mutex)));
     }
 
     std::exception_ptr Listener::getThreadError() {
@@ -74,28 +73,36 @@ namespace zftp {
         return latestErr;
     }
 
-    void Listener::_blockingListen(int writePipe, std::unordered_map<int, User>& clientsList, std::shared_timed_mutex& mutex) {
+    void Listener::_blockingListen(const int alertPipe, std::unordered_map<int, User>& clientsList, std::shared_timed_mutex& mutex) {
         try {
             std::cout << "New thread: " << std::this_thread::get_id() << std::endl;
             struct sockaddr_storage clientAddress{};
             socklen_t addrLength = sizeof(clientAddress);
             while (true) {
                 int newSocket;
-                if ((newSocket = accept(listenerSocket, (struct sockaddr *) &clientAddress, &addrLength)) == -1) {
+                if ((newSocket = accept4(listenerSocket, (struct sockaddr *) &clientAddress, &addrLength, SOCK_NONBLOCK)) == -1) {
                     throw std::runtime_error("Could not accept an incoming connection.");
                 }
                 else {
+                    std::cout << "New client: " << newSocket << std::endl;
                     std::scoped_lock<std::shared_timed_mutex> lock(mutex);
                     clientsList.emplace(newSocket, User(newSocket));
                     //then signal to the handler that it needs to update it's
                     //pollfd struct
-                    write(writePipe, "A", 1);
+                    char fdBuf[64]{};
+                    snprintf(fdBuf, 64, "%d|", newSocket);
+                    errno = 0;
+                    if (write(alertPipe, fdBuf, strlen(fdBuf)) < 0) {
+                        std::cout << errno << std::endl;
+                        throw std::runtime_error("Could not send FD to handler.");
+                    };
                 }
             }
         }
         catch (...) {
             std::scoped_lock<std::shared_timed_mutex> lock(errorMutex);
             threadErrors.push(std::current_exception());
+            return;
         }
         
     }

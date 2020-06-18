@@ -1,6 +1,7 @@
 #include "handlerfunctions.h"
 
 namespace zftp {
+    // These are a number of helper functions for the main init handling method
     namespace {
         std::vector<struct pollfd> createPollVector(std::unordered_map<int, User>& users, int selfPipeServerAlert, std::shared_timed_mutex& mutex) {
             std::vector<struct pollfd> pollingVector;
@@ -38,15 +39,47 @@ namespace zftp {
 
             return newFdVector;
         }
+
+        std::string processPipeAlert(int selfPipeServerAlert) {
+            int bytesRead = 0;
+            char buf[255]{};
+            std::string newstring{};
+            //get any new fds from the listener (who sends it via a selfpipe)
+            while ((bytesRead = read(selfPipeServerAlert, buf, 255)) != 0) {
+                if (bytesRead < 0 && errno == EAGAIN) {
+                    break;
+                }
+                else if (bytesRead < 0) {
+                    return "ERROR";
+                }
+                newstring += std::string(buf);
+            }
+            return newstring;
+        }
+
+        void processHangups(std::unordered_map<int, User>& users, std::vector<struct pollfd>& hangups, std::vector<struct pollfd>& pollingVector, std::shared_timed_mutex& mutex) {
+            for (auto i: hangups) {
+                shutdown(i.fd, SHUT_RDWR);
+                close(i.fd);
+                pollingVector.erase(std::find_if(pollingVector.begin(), pollingVector.end(), [i](auto j){
+                    return i.fd == j.fd;
+                    }));
+                std::scoped_lock<std::shared_timed_mutex> lock(mutex);
+                users.erase(i.fd);
+            }
+            hangups.clear();
+        }
     }
-    void initHandling(bool& error, std::unordered_map<int, User>& users, std::shared_timed_mutex& mutex, int selfPipeServerAlert, int writeToDTP, int readFromDTP) {
+
+    void initHandling(bool& error, std::unordered_map<int, User>& users, std::shared_timed_mutex& usersMutex, int selfPipeServerAlert, int writeToDTP, int readFromDTP) {
         int readyCount;
         std::vector<struct pollfd> pollingVector;
         std::vector<struct pollfd> newFds;
         std::vector<struct pollfd> hangups;
         std::string newfdstring;
 
-        pollingVector = createPollVector(users, selfPipeServerAlert, mutex);  
+        std::shared_lock<std::shared_timed_mutex> lock(usersMutex);
+        pollingVector = createPollVector(users, selfPipeServerAlert, usersMutex);  
 
         while (true) {
             if ((readyCount = poll(&pollingVector[0], pollingVector.size(), -1) < 0)) {
@@ -54,53 +87,39 @@ namespace zftp {
                 return;
             }
             for (auto pollfd: pollingVector) {
-                //std::cout << pollfd.fd << ":" << pollfd.revents << std::endl;
                 if (pollfd.revents & POLLERR || pollfd.revents & POLLHUP || pollfd.revents & POLLRDHUP) {
                     hangups.push_back(pollfd);
                 }
-                if (pollfd.revents & POLLIN) {
-                    if (pollfd.fd == selfPipeServerAlert) {
-                        int bytesRead = 0;
-                        char buf[255];
-                        //get any new fds from the listener (who sends it via a selfpipe)
-                        while ((bytesRead = read(selfPipeServerAlert, buf, 255)) != 0) {
-                            if (bytesRead < 0 && errno == EAGAIN) {
-                               break;
-                            }
-                            else if (bytesRead < 0) {
-                                error = true;
-                                return;
-                            }
-                            newfdstring += std::string(buf);
-                        }
+                if (pollfd.revents & POLLIN && pollfd.fd == selfPipeServerAlert) {
+                    if ((newfdstring = processPipeAlert(selfPipeServerAlert)) == "ERROR") {
+                        error = true;
+                        return;
+                    }
+                }
+                else if (pollfd.revents & POLLIN) {
+                    std::vector<std::string> message;
+                    std::shared_lock<std::shared_timed_mutex> lock(usersMutex);
+                    User& user = users.at(pollfd.fd);
+                    message = user.readMessage();
+                    if (message[0] == "DISCONNECTED" || message.empty()) {
+                        hangups.push_back(pollfd);
                     }
                     else {
-                        std::vector<std::string> commands;
-                        commands = users.at(pollfd.fd).readCommand();
-                        if (commands[0] == "DISCONNECTED") {
-                            hangups.push_back(pollfd);
+                        //accesses the global commands dict
+                        //using the received command string as 
+                        //then calls that function with the current user
+                        try {
+                            std::cout << user.getName() << ": " << message[0] << std::endl;
+                            zftp::commands.at(message[0])(message, user);
                         }
-                        else if (commands.empty()) {
-                            //handle other error
-                        }
-                        else {
-                            for (auto arg: commands) {
-                                std::cout << arg << std::endl;
-                            }
+                        catch (std::out_of_range &e) {
+                            user.sendResponse(500, "Command not recognised");
                         }
                     }
-                    pollfd.revents = 0;
                 }
+                pollfd.revents = 0;
             }
-            
-            for (auto i: hangups) {
-                shutdown(i.fd, SHUT_RDWR);
-                close(i.fd);
-                pollingVector.erase(std::find_if(pollingVector.begin(), pollingVector.end(), [i](auto j){
-                    return i.fd == j.fd;
-                    }));
-            }
-            hangups.clear();
+            processHangups(users, hangups, pollingVector, usersMutex);
 
             if (!newfdstring.empty()) {
                 newFds = stringToPollVector(newfdstring);
@@ -112,41 +131,58 @@ namespace zftp {
             }
         }
     }  
-    void _202(User user) {
-        user.sendResponse(202, "Not implemented.");
+    void UNIMPLEMENTED_ERROR(std::vector<std::string>, User user) {
+        user.sendResponse(502, "Not implemented.");
     }
-    /*const std::unordered_map<std::string, void (*)(User)> commands{
-        {std::string("USER"), _202},
-        {std::string("PASS"), _202},
-        {std::string("ACCT"), _202},
-        {std::string("CWD"), _202},
-        {std::string("CDUP"), _202},
-        {std::string("SMNT"), _202},
-        {std::string("REIN"), _202},
-        {std::string("QUIT"), _202},
-        {std::string("PORT"), _202},
-        {std::string("PASV"), _202},
-        {std::string("MODE"), _202},
-        {std::string("TYPE"), _202},
-        {std::string("STRU"), _202},
-        {std::string("ALLO"), _202},
-        {std::string("REST"), _202},
-        {std::string("STOR"), _202},
-        {std::string("STOU"), _202},
-        {std::string("RETR"), _202},
-        {std::string("LIST"), _202},
-        {std::string("NLST"), _202},
-        {std::string("APPE"), _202},
-        {std::string("RNFR"), _202},
-        {std::string("DELE"), _202},
-        {std::string("RMD"), _202},
-        {std::string("MKD"), _202},
-        {std::string("PWD"), _202},
-        {std::string("ABOR"), _202},
-        {std::string("SYST"), _202},
-        {std::string("STAT"), _202},
-        {std::string("HELP"), _202},
-        {std::string("SITE"), _202},
-        {std::string("NOOP"), _202} 
-    };*/
+
+
+    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User)> commands{
+        {std::string("USER"), USER},
+        {std::string("PASS"), UNIMPLEMENTED_ERROR},
+        {std::string("ACCT"), UNIMPLEMENTED_ERROR},
+        {std::string("CWD"), UNIMPLEMENTED_ERROR},
+        {std::string("CDUP"), UNIMPLEMENTED_ERROR},
+        {std::string("SMNT"), UNIMPLEMENTED_ERROR},
+        {std::string("REIN"), UNIMPLEMENTED_ERROR},
+        {std::string("QUIT"), UNIMPLEMENTED_ERROR},
+        {std::string("PORT"), UNIMPLEMENTED_ERROR},
+        {std::string("PASV"), UNIMPLEMENTED_ERROR},
+        {std::string("MODE"), UNIMPLEMENTED_ERROR},
+        {std::string("TYPE"), UNIMPLEMENTED_ERROR},
+        {std::string("STRU"), UNIMPLEMENTED_ERROR},
+        {std::string("ALLO"), UNIMPLEMENTED_ERROR},
+        {std::string("REST"), UNIMPLEMENTED_ERROR},
+        {std::string("STOR"), UNIMPLEMENTED_ERROR},
+        {std::string("STOU"), UNIMPLEMENTED_ERROR},
+        {std::string("RETR"), UNIMPLEMENTED_ERROR},
+        {std::string("LIST"), UNIMPLEMENTED_ERROR},
+        {std::string("NLST"), UNIMPLEMENTED_ERROR},
+        {std::string("APPE"), UNIMPLEMENTED_ERROR},
+        {std::string("RNFR"), UNIMPLEMENTED_ERROR},
+        {std::string("DELE"), UNIMPLEMENTED_ERROR},
+        {std::string("RMD"), UNIMPLEMENTED_ERROR},
+        {std::string("MKD"), UNIMPLEMENTED_ERROR},
+        {std::string("PWD"), UNIMPLEMENTED_ERROR},
+        {std::string("ABOR"), UNIMPLEMENTED_ERROR},
+        {std::string("SYST"), UNIMPLEMENTED_ERROR},
+        {std::string("STAT"), UNIMPLEMENTED_ERROR},
+        {std::string("HELP"), UNIMPLEMENTED_ERROR},
+        {std::string("SITE"), UNIMPLEMENTED_ERROR},
+        {std::string("NOOP"), UNIMPLEMENTED_ERROR} 
+    };
+
+    void USER(std::vector<std::string> args, User u) {
+        if (args.size() != 2) {
+            u.sendResponse(501, "Invalid number of arguments");
+            return;
+        }
+        u.setName(args[1]);
+        u.sendResponse(230, "Logged in, continue");
+    }
+
+    void SYST(std::vector<std::string> args, User u) {
+        if (args.size() != 1) {
+            u.sendResponse(501, "Invalid number of arguments");
+        }
+    }
 }

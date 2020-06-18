@@ -1,7 +1,9 @@
 #include "user.h"
 
 namespace zftp {
-    User::User(int fd) : fd{fd}
+    User::User(int fd) : 
+    fd{fd},
+    lastCommand{""}
     {
 
     }
@@ -18,35 +20,46 @@ namespace zftp {
         username = name;
     }
 
-    std::vector<std::string> User::readCommand() {
+    std::vector<std::string> User::readMessage() {
         char buf[255];
         int bytesRead;
-        std::string command;
-        std::vector<std::string> commandPlusArgs;
+        std::string message;
+        std::vector<std::string> args;
         errno = 0;
         while (bytesRead = read(fd, buf, 255)) {
             if (bytesRead < 0 && errno == EAGAIN) {
                 break;
             }
             else if (bytesRead < 0) {
-                return commandPlusArgs;
+                return args;
             }
-            command += std::string(buf);
+            message += std::string(buf);
         }
+
         if (bytesRead == 0) {
-            commandPlusArgs.push_back("DISCONNECTED");
+            args.push_back("DISCONNECTED");
         }
         else {
-            //come back to this (update logic for finding strings '"', as well as extra spaces)
-            commandPlusArgs.push_back(command.substr(0, command.find(' ')));
-            commandPlusArgs.push_back(command.substr(command.find(' ') + 1, command.find("\r\n")-command.find(' ') + 1));
+            if (message.size() > 1) {
+                //clear CRLF
+                message.pop_back();
+                message.pop_back();
+            }
+            std::istringstream stream{message};
+            std::string arg;
+            while (std::getline(stream, arg, ' ')) {
+                args.push_back(arg);
+            }
+            //Command code can be in lower or uppercase
+            std::transform(args[0].begin(), args[0].end(), args[0].begin(),
+                [](unsigned char c){ return std::toupper(c); });
+
         }
-        return commandPlusArgs;
+        return args;
 
     }
 
     int User::sendResponse(uint code, std::string message) {
-        ssize_t bytesWritten;
         if (code > 999) return -1;
         ssize_t len = message.length() + 7; //3 for the code, 1 for the space, 2 for CRLF, 1 for \0
         char * buf = (char *) malloc(len * sizeof(char));

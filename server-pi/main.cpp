@@ -41,7 +41,7 @@ int main(int argc, char * argv[]) {
     std::ref(globalClientsListMutex),
     serverPipe[0], writeToDTP, readFromDTP};
 
-
+    
     zftp::Listener listener;
     
 
@@ -55,7 +55,7 @@ int main(int argc, char * argv[]) {
     std::cout << "DTP ready" << std::endl;
 
     listener.addListener(serverPipe[1], globalClientsList, globalClientsListMutex);
-
+    
     int errorCount = 0;
     std::exception_ptr listenException;
     while (true) {

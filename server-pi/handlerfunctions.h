@@ -20,10 +20,14 @@
 #include "user.h"
 
 namespace zftp {
-    // This blocks, call in a thread 
+    //Main handling loop function. Handles polling existing users and calling the correct method when a command comes in.
+    //This blocks, call in a thread.
     void initHandling(bool& error, std::unordered_map<int, User>& users, std::shared_timed_mutex& mutex, int selfPipeServerAlert, int writeToDTP, int readFromDTP);    
-    void _202(User u);
-    //std::unordered_map<std::string, void (*)(User)> commands;    
+    void UNIMPLEMENTED_ERROR(std::vector<std::string>, User u);
+
+    //Maps command names to functions for convenience.
+    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User)> commands;
+    void USER(std::vector<std::string> args, User u);
 }   
 
 #endif

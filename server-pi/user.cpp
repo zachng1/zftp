@@ -22,7 +22,7 @@ namespace zftp {
 
     std::vector<std::string> User::readMessage() {
         char buf[255];
-        int bytesRead;
+        int bytesRead, end;
         std::string message;
         std::vector<std::string> args;
         errno = 0;
@@ -40,20 +40,17 @@ namespace zftp {
             args.push_back("DISCONNECTED");
         }
         else {
-            if (message.size() > 1) {
-                //clear CRLF
-                message.pop_back();
-                message.pop_back();
-            }
+            end = message.find("\r\n", 0);
+            if (end > 1) message = message.substr(0, end);
             std::istringstream stream{message};
             std::string arg;
             while (std::getline(stream, arg, ' ')) {
                 args.push_back(arg);
             }
             //Command code can be in lower or uppercase
+            //Convert to upper for accessing commands array
             std::transform(args[0].begin(), args[0].end(), args[0].begin(),
                 [](unsigned char c){ return std::toupper(c); });
-
         }
         return args;
 

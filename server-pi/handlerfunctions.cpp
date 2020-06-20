@@ -78,7 +78,6 @@ namespace zftp {
         std::vector<struct pollfd> hangups;
         std::string newfdstring;
 
-        std::shared_lock<std::shared_timed_mutex> lock(usersMutex);
         pollingVector = createPollVector(users, selfPipeServerAlert, usersMutex);  
 
         while (true) {
@@ -131,12 +130,12 @@ namespace zftp {
             }
         }
     }  
-    void UNIMPLEMENTED_ERROR(std::vector<std::string>, User user) {
+    void UNIMPLEMENTED_ERROR(std::vector<std::string>, User& user) {
         user.sendResponse(502, "Not implemented.");
     }
 
 
-    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User)> commands{
+    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User&)> commands{
         {std::string("USER"), USER},
         {std::string("PASS"), UNIMPLEMENTED_ERROR},
         {std::string("ACCT"), UNIMPLEMENTED_ERROR},
@@ -171,7 +170,7 @@ namespace zftp {
         {std::string("NOOP"), UNIMPLEMENTED_ERROR} 
     };
 
-    void USER(std::vector<std::string> args, User u) {
+    void USER(std::vector<std::string> args, User& u) {
         if (args.size() != 2) {
             u.sendResponse(501, "Invalid number of arguments");
             return;
@@ -180,9 +179,11 @@ namespace zftp {
         u.sendResponse(230, "Logged in, continue");
     }
 
-    void SYST(std::vector<std::string> args, User u) {
+    void SYST(std::vector<std::string> args, User& u) {
         if (args.size() != 1) {
             u.sendResponse(501, "Invalid number of arguments");
+            return;
         }
+        u.sendResponse(215, "UNIX"); //I couldn't figure out what to call to get this at runtime lol
     }
 }

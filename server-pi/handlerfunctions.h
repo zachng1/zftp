@@ -26,8 +26,8 @@ namespace zftp {
     void UNIMPLEMENTED_ERROR(std::vector<std::string>, User u);
 
     //Maps command names to functions for convenience.
-    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User)> commands;
-    void USER(std::vector<std::string> args, User u);
+    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User&)> commands;
+    void USER(std::vector<std::string> args, User& u);
 }   
 
 #endif

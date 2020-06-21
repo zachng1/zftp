@@ -17,9 +17,17 @@ int main(int argc, char ** argv) {
     //signal to PI that we are ready to start sending and recieving data
     char readyBuf[1]{'A'};
     if (write(writeToPi, readyBuf, 1) < 0) {
-        std::cout << "Error writing to PI" << std::endl;
+        std::cout << "Error signalling PI" << std::endl;
         return 1;
     };
+
+    /* responsibilities:
+        - listen for messages from PI (new data connection, expect read, expect write)
+        - initiate new data connections
+        - read incoming data (process uploads)
+        - write outgoing data (process downloads)
+       use image mode (BINARY) for all transfers
+    */  
     while (1);
     return 0;
 }

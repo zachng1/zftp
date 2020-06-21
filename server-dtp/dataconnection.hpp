@@ -6,12 +6,8 @@
 namespace zftp{
 class DataConnection {
     public:
-    virtual DataConnection(int fileFd, int sockFd) = 0;
     virtual int transferFile(int bytes) = 0;
-    
-    private:
-    int sockFd;
-    int fileFd;
-
 };
 }
+
+#endif

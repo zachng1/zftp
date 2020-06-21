@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "user.h"
+#include "user.hpp"
 
 namespace zftp {
     class Listener {

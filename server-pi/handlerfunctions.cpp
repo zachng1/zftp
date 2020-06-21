@@ -1,4 +1,4 @@
-#include "handlerfunctions.h"
+#include "handlerfunctions.hpp"
 
 namespace zftp {
     // These are a number of helper functions for the main init handling method

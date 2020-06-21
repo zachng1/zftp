@@ -16,8 +16,8 @@
 #include <unistd.h>
 #include <poll.h>
 
-#include "listener.h"
-#include "user.h"
+#include "listener.hpp"
+#include "user.hpp"
 
 namespace zftp {
     //Main handling loop function. Handles polling existing users and calling the correct method when a command comes in.

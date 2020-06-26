@@ -45,14 +45,19 @@ int main(int argc, char * argv[]) {
     zftp::Listener listener;
     
 
-    //Read will block until DTP sends a single byte
+    //this loops until DTP sends us a byte
     //Ensure DTP is ready to handle requests before
     //beginning to listen for connections
     char readyBuf[1];
-    if (read(readFromDTP, readyBuf, 1) != 1) {
-        std::cerr << "Error reading from DTP" << std::endl;
+    int charsRead;
+    while (charsRead = read(readFromDTP, readyBuf, 1)) {
+        if (errno == EAGAIN) continue;
+        else if (charsRead == 1) break;
+        else {
+            std::cerr << "Error reading from DTP" << std::endl;
+            return 1;
+        }
     }
-    std::cout << "DTP ready" << std::endl;
 
     listener.addListener(serverPipe[1], globalClientsList, globalClientsListMutex);
     
@@ -94,8 +99,6 @@ int main(int argc, char * argv[]) {
     if (handlerThread.joinable()) {
         handlerThread.join();
     }
-
-    //signal parent
 
     return 0;
 }

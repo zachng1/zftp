@@ -25,10 +25,19 @@
 
 #include "dataconnection.hpp"
 
+//Function declarations
+
 std::vector<std::vector<std::string>> parsePICommands(int readFromPi);
+
 bool processCommand(std::vector<std::string> command, 
 std::unordered_map<int, zftp::DataConnection>& connections, 
 std::vector<struct pollfd>& pollfds);
+
+void processPollFd(struct pollfd pollfd, 
+std::vector<std::vector<std::string>>& commandsList,
+std::unordered_map<int, zftp::DataConnection>& connections,
+std::vector<struct pollfd>& completedConnections,
+int readFromPi);
 
 int main(int argc, char ** argv) {
     int writeToPi = std::stoi(std::string(argv[1]));
@@ -54,26 +63,7 @@ int main(int argc, char ** argv) {
     
     while (poll(&pollfds[0], pollfds.size(), -1)) {
         for (auto pollfd: pollfds) {
-            if (pollfd.revents & POLLIN && pollfd.fd == readFromPi) {
-                commandsList = parsePICommands(readFromPi);                
-            }
-            else if (pollfd.revents & POLLIN) {
-                if (connections[pollfd.fd].transferFile(255) == 0) {
-                    shutdown(pollfd.fd, SHUT_RDWR);
-                    close(pollfd.fd);                    
-                    connections.erase(pollfd.fd);
-                    completedConnections.push_back(pollfd);
-                }
-            }
-            else if (pollfd.revents & POLLOUT) {
-                if (connections[pollfd.fd].transferFile(255) == 0) {
-                    shutdown(pollfd.fd, SHUT_RDWR);
-                    close(pollfd.fd);
-                    connections.erase(pollfd.fd);
-                    completedConnections.push_back(pollfd);
-                }
-            }
-            pollfd.revents = 0;
+            processPollFd(pollfd, commandsList, connections, completedConnections, readFromPi);
         }
         for (auto command: commandsList) {
             if (!processCommand(command, connections, pollfds)) {
@@ -85,7 +75,7 @@ int main(int argc, char ** argv) {
         
         for (auto completion: completedConnections) {
             pollfds.erase(std::find_if(pollfds.begin(), pollfds.end(), [completion](auto j){
-                    return i.fd == j.fd;
+                    return completion.fd == j.fd;
                     }));
         }
 
@@ -162,4 +152,31 @@ std::vector<struct pollfd>& pollfds) {
     newPollFd.revents = 0;
     pollfds.push_back(newPollFd);
     return true;
+}
+
+void processPollFd(struct pollfd pollfd, 
+std::vector<std::vector<std::string>>& commandsList,
+std::unordered_map<int, zftp::DataConnection>& connections,
+std::vector<struct pollfd>& completedConnections,
+int readFromPi) {
+    if (pollfd.revents & POLLIN && pollfd.fd == readFromPi) {
+                commandsList = parsePICommands(readFromPi);                
+    }
+    else if (pollfd.revents & POLLIN) {
+        if (connections[pollfd.fd].transferFile(255) == 0) {
+            shutdown(pollfd.fd, SHUT_RDWR);
+            close(pollfd.fd);                    
+            connections.erase(pollfd.fd);
+            completedConnections.push_back(pollfd);
+        }
+    }
+    else if (pollfd.revents & POLLOUT) {
+        if (connections[pollfd.fd].transferFile(255) == 0) {
+            shutdown(pollfd.fd, SHUT_RDWR);
+            close(pollfd.fd);
+            connections.erase(pollfd.fd);
+            completedConnections.push_back(pollfd);
+        }
+    }
+    pollfd.revents = 0;
 }

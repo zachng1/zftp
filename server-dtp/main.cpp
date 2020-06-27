@@ -11,6 +11,7 @@
 #include <vector>
 #include <sstream>
 #include <unordered_map>
+#include <algorithm>
 
 //C Socket headers:
 #include <sys/types.h>
@@ -46,6 +47,7 @@ int main(int argc, char ** argv) {
 
     std::vector<std::vector<std::string>> commandsList;
     std::unordered_map<int, zftp::DataConnection> connections;
+    std::vector<struct pollfd> completedConnections;
     
     while (poll(&pollfds[0], pollfds.size(), -1)) {
         for (auto pollfd: pollfds) {
@@ -57,6 +59,7 @@ int main(int argc, char ** argv) {
                     shutdown(pollfd.fd, SHUT_RDWR);
                     close(pollfd.fd);                    
                     connections.erase(pollfd.fd);
+                    completedConnections.push_back(pollfd);
                 }
             }
             else if (pollfd.revents & POLLOUT) {
@@ -64,17 +67,45 @@ int main(int argc, char ** argv) {
                     shutdown(pollfd.fd, SHUT_RDWR);
                     close(pollfd.fd);
                     connections.erase(pollfd.fd);
+                    completedConnections.push_back(pollfd);
                 }
             }
             pollfd.revents = 0;
         }
-        int newConnectionFd;
+        int newConnectionFd = -1;
+        struct pollfd newPollFd;
+        zftp::UploadConnection newUpload;
+        zftp::DownloadConnection newDownload;
         for (auto command: commandsList) {
-            if (command[1].compare("A") == 0) {
-                newConnectionFd = zftp::newActiveConnection(command);
+            if (command[2].compare("A") == 0) {
+                newConnectionFd = zftp::getActiveConnectionFd(command);
             }
+            else if (command[2].compare("P") == 0) {
+                newConnectionFd = zftp::getPassiveConnectionFd(command);
+            }
+            if (newConnectionFd == -1) continue;
+
+            newPollFd.fd = newConnectionFd;
+            if (command[3].compare("D") == 0) {
+                newDownload = zftp::DownloadConnection(newConnectionFd, command[1]);
+                connections[newConnectionFd] = newDownload; 
+                newPollFd.events = POLLOUT;
+                
+            }
+            else if (command[3].compare("U") == 0) {
+                newUpload = zftp::UploadConnection(newConnectionFd, command[1]);
+                connections[newConnectionFd] = newUpload;
+                newPollFd.events = POLLIN;
+            }
+            newPollFd.revents = 0;
+            pollfds.push_back(newPollFd);
         }
-        //handle commands here (create new connections either active or passive)
+        
+        for (auto completion: completedConnections) {
+            pollfds.erase(std::find_if(pollfds.begin(), pollfds.end(), [completion](auto j){
+                    return i.fd == j.fd;
+                    }));
+        }
 
     }
 

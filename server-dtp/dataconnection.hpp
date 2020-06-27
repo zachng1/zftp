@@ -4,6 +4,15 @@
 //subclass for download vs upload
 #include <string>
 #include <vector>
+#include <iostream>
+
+//C Socket headers:
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h> 
+#include <fcntl.h>
 
 namespace zftp{
 class DataConnection {
@@ -13,7 +22,8 @@ class DataConnection {
 
 class UploadConnection : public DataConnection {
     public:
-    UploadConnection(int fd, int fileFD);
+    UploadConnection(){};
+    UploadConnection(int fd, std::string path);
     int transferFile(int bytes);
 
     private:
@@ -23,7 +33,8 @@ class UploadConnection : public DataConnection {
 
 class DownloadConnection : public DataConnection {
     public:
-    DownloadConnection(int fd, int fileFD);
+    DownloadConnection(){};
+    DownloadConnection(int fd, std::string path);
     int transferFile(int bytes);
 
     private:
@@ -31,12 +42,13 @@ class DownloadConnection : public DataConnection {
     int fileSocket;
 };
 
-//Returns a new socket.
-int newActiveConnection(std::vector<std::string> command);
+//Returns a new socket. It may not be connected yet. Check for
+//writability and socket errors to make sure it is connected.
+int getActiveConnectionFd(std::vector<std::string> command);
 
 //Returns a new *listening* socket -- make sure it gets closed once
 //the client makes a connection
-int newPassiveConnection(std::vector<std::string> command);
+int getPassiveConnectionFd(std::vector<std::string> command);
 }
 
 #endif

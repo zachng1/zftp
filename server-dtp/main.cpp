@@ -26,6 +26,9 @@
 #include "dataconnection.hpp"
 
 std::vector<std::vector<std::string>> parsePICommands(int readFromPi);
+bool processCommand(std::vector<std::string> command, 
+std::unordered_map<int, zftp::DataConnection>& connections, 
+std::vector<struct pollfd>& pollfds);
 
 int main(int argc, char ** argv) {
     int writeToPi = std::stoi(std::string(argv[1]));
@@ -72,34 +75,13 @@ int main(int argc, char ** argv) {
             }
             pollfd.revents = 0;
         }
-        int newConnectionFd = -1;
-        struct pollfd newPollFd;
-        zftp::UploadConnection newUpload;
-        zftp::DownloadConnection newDownload;
         for (auto command: commandsList) {
-            if (command[2].compare("A") == 0) {
-                newConnectionFd = zftp::getActiveConnectionFd(command);
-            }
-            else if (command[2].compare("P") == 0) {
-                newConnectionFd = zftp::getPassiveConnectionFd(command);
-            }
-            if (newConnectionFd == -1) continue;
-
-            newPollFd.fd = newConnectionFd;
-            if (command[3].compare("D") == 0) {
-                newDownload = zftp::DownloadConnection(newConnectionFd, command[1]);
-                connections[newConnectionFd] = newDownload; 
-                newPollFd.events = POLLOUT;
-                
-            }
-            else if (command[3].compare("U") == 0) {
-                newUpload = zftp::UploadConnection(newConnectionFd, command[1]);
-                connections[newConnectionFd] = newUpload;
-                newPollFd.events = POLLIN;
-            }
-            newPollFd.revents = 0;
-            pollfds.push_back(newPollFd);
-        }
+            if (!processCommand(command, connections, pollfds)) {
+                //write a message back to PI with id and error
+                //something like send(writeToPi, "ERROR ON COMMAND: %d", command[0], 0000 etc.)
+                //obviously fprint to the send buf first
+            }      
+        }  
         
         for (auto completion: completedConnections) {
             pollfds.erase(std::find_if(pollfds.begin(), pollfds.end(), [completion](auto j){
@@ -149,4 +131,35 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
 
     return result;
 
+}
+
+bool processCommand(std::vector<std::string> command, 
+std::unordered_map<int, zftp::DataConnection>& connections, 
+std::vector<struct pollfd>& pollfds) {
+    int newConnectionFd = -1;
+    struct pollfd newPollFd;
+    if (command[2].compare("A") == 0) {
+        newConnectionFd = zftp::getActiveConnectionFd(command);
+    }
+    else if (command[2].compare("P") == 0) {
+        newConnectionFd = zftp::getPassiveConnectionFd(command);
+    }
+    if (newConnectionFd == -1) return false;
+
+    newPollFd.fd = newConnectionFd;
+    if (command[3].compare("D") == 0) {
+        zftp::DownloadConnection newDownload(newConnectionFd, command[1]);
+        connections[newConnectionFd] = newDownload; 
+        newPollFd.events = POLLOUT;
+        
+    }
+    else if (command[3].compare("U") == 0) {
+        zftp::UploadConnection newUpload(newConnectionFd, command[1]);
+        connections[newConnectionFd] = newUpload;
+        newPollFd.events = POLLIN;
+    }
+    else return false;
+    newPollFd.revents = 0;
+    pollfds.push_back(newPollFd);
+    return true;
 }

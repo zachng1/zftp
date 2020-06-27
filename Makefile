@@ -2,7 +2,7 @@ CC = g++
 compile-flags = -g -Wall -Wextra -pedantic -std=c++17
 link-flags = -pthread
 
-objects-dtp = $(addprefix server-dtp/,main.o)
+objects-dtp = $(addprefix server-dtp/,main.o dataconnection.o)
 objects-pi = $(addprefix server-pi/,listener.o user.o handlerfunctions.o main.o)
 objects-launcher = launcher.cpp
 exe-dtp = server-dtp/dtp

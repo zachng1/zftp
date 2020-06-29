@@ -72,13 +72,11 @@ int main(int argc, char ** argv) {
                 //obviously fprint to the send buf first
             }      
         }  
-        
         for (auto completion: completedConnections) {
             pollfds.erase(std::find_if(pollfds.begin(), pollfds.end(), [completion](auto j){
                     return completion.fd == j.fd;
                     }));
         }
-
     }
 
     return 0;

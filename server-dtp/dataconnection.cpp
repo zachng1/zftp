@@ -1,15 +1,48 @@
 #include "dataconnection.hpp"
 
 namespace zftp{
-DownloadConnection::DownloadConnection(int fd, std::string path) {
-    
+DownloadConnection::DownloadConnection(int fd, std::string path) : fd{fd} {
+    fileSocket = open(path.c_str(), O_RDONLY);
 }
 int DownloadConnection::transferFile(int bytes) {
-
+    char * buf = (char *) malloc(sizeof(char) * bytes);
+    char * bufstart = buf;
+    int bytesSent, total = 0;
+    //read exactly bytes into buf
+    while (total < bytes) {
+        if ((bytesSent = read(fileSocket, buf, bytes - total)) == 0) {
+            break;
+        }
+        total += bytesSent;
+        buf += bytesSent;
+    }
+    buf = bufstart;
+    if (total == 0) {
+        free(buf);
+        return total;
+    }
+    int writeTotal = 0;
+    //write exactly bytes to fd
+    while (writeTotal < total) {
+        errno = 0;
+        if ((bytesSent = write(fd, buf, bytes - writeTotal)) < 0 && errno != EAGAIN) {
+            buf = bufstart;
+            free(buf);
+            return bytesSent;
+        }
+        if (bytesSent == 0) {
+            break;
+        }
+        writeTotal += bytesSent;
+        buf += bytesSent;
+    }
+    buf = bufstart;
+    free(buf);
+    return writeTotal;
 }
 
 UploadConnection::UploadConnection(int fd, std::string path) {
-    
+    fileSocket = open(path.c_str(), O_WRONLY | O_CREAT);
 }
 int UploadConnection::transferFile(int bytes) {
 
@@ -35,7 +68,7 @@ int getActiveConnectionFd(std::vector<std::string> command) {
             continue;
         }
         if (connect(resultFd, i->ai_addr, i->ai_addrlen) < 0) {
-            if (errno = EINPROGRESS || errno == EAGAIN) {
+            if (errno == EINPROGRESS || errno == EAGAIN) {
                 break;
             }
             resultFd = -1;

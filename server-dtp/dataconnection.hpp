@@ -13,16 +13,22 @@
 #include <arpa/inet.h>
 #include <netdb.h> 
 #include <fcntl.h>
+#include <unistd.h>
 
 namespace zftp{
+//the following 3 classes are named from the perspective of the 
+//USER -- download connection means the server is *sending* data etc.
+
 class DataConnection {
     public:
+    //Couldn't make it pure virtual since we need a map
+    //that uses it as a template
+    DataConnection(){throw std::runtime_error("Do not instantiate this class.");};
     virtual int transferFile(int bytes) = 0;
 };
 
 class UploadConnection : public DataConnection {
     public:
-    UploadConnection(){};
     UploadConnection(int fd, std::string path);
     int transferFile(int bytes);
 
@@ -33,7 +39,6 @@ class UploadConnection : public DataConnection {
 
 class DownloadConnection : public DataConnection {
     public:
-    DownloadConnection(){};
     DownloadConnection(int fd, std::string path);
     int transferFile(int bytes);
 

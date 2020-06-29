@@ -17,7 +17,7 @@ $(exe-pi): $(objects-pi)
 $(exe-dtp): $(objects-dtp)
 	$(CC) $(compile-flags) -o $(exe-dtp) $(objects-dtp) $(link-flags)	
 	
-%.o: %.cpp
+%.o: %.cpp %.hpp
 	$(CC) $(compile-flags) -c -o $@ $< $(link-flags)
 
 .PHONY: clean pi dtp launcher

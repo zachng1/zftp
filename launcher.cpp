@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+void setNonBlock(int pipe);
+
 int main() {   
     int WritePipe[2], ReadPipe[2];
     pid_t DTPProcId, PIProcId;
@@ -18,10 +20,15 @@ int main() {
         std::cerr << "Could not initiate pipes." << std::endl;
         return 1;
     }
+    
     int writeToPI = ReadPipe[1];
     int writeToDTP = WritePipe[1];
     int readFromPI = WritePipe[0];
     int readFromDTP = ReadPipe[0];
+    setNonBlock(writeToPI);
+    setNonBlock(writeToDTP);
+    setNonBlock(readFromPI);
+    setNonBlock(readFromDTP);
 
     if ((DTPProcId = fork()) == 0) {
         close(writeToDTP);
@@ -91,4 +98,9 @@ int main() {
     }
         
     return 0;
+}
+
+void setNonBlock(int pipe) {
+    int flags = fcntl(pipe, F_GETFL, 0);
+    fcntl(pipe, F_SETFL, flags | O_NONBLOCK);
 }

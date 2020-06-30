@@ -23,10 +23,14 @@
 namespace zftp{
     class User {
         public:
-        User(int fd);
+        User(int fd, int port = 21);
         int getDescriptor();
         std::string getName();
         void setName(std::string name);
+        std::string getLastCommand();
+        void setLastCommand(std::string command);
+
+
         int sendResponse(uint code, std::string message="");
         int sendMultilineResponse(uint code, std::vector<std::string> messages);
         //Returns a vector containing only "DISCONNECTED" on disconnect

@@ -1,8 +1,9 @@
 #include "user.hpp"
 
 namespace zftp {
-    User::User(int fd) : 
+    User::User(int fd, int port) : 
     fd{fd},
+    port{port},
     lastCommand{""}
     {
 
@@ -18,6 +19,13 @@ namespace zftp {
 
     void User::setName(std::string name) {
         username = name;
+    }
+
+    std::string User::getLastCommand() {
+        return lastCommand;
+    }
+    void User::setLastCommand(std::string command) {
+        lastCommand = command;
     }
 
     std::vector<std::string> User::readMessage() {

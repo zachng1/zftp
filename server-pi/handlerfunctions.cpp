@@ -153,7 +153,7 @@ namespace zftp {
         {std::string("REST"), UNIMPLEMENTED_ERROR},
         {std::string("STOR"), UNIMPLEMENTED_ERROR},
         {std::string("STOU"), UNIMPLEMENTED_ERROR},
-        {std::string("RETR"), UNIMPLEMENTED_ERROR},
+        {std::string("RETR"), RETR},
         {std::string("LIST"), UNIMPLEMENTED_ERROR},
         {std::string("NLST"), UNIMPLEMENTED_ERROR},
         {std::string("APPE"), UNIMPLEMENTED_ERROR},
@@ -163,7 +163,7 @@ namespace zftp {
         {std::string("MKD"), UNIMPLEMENTED_ERROR},
         {std::string("PWD"), UNIMPLEMENTED_ERROR},
         {std::string("ABOR"), UNIMPLEMENTED_ERROR},
-        {std::string("SYST"), UNIMPLEMENTED_ERROR},
+        {std::string("SYST"), SYST},
         {std::string("STAT"), UNIMPLEMENTED_ERROR},
         {std::string("HELP"), UNIMPLEMENTED_ERROR},
         {std::string("SITE"), UNIMPLEMENTED_ERROR},
@@ -185,5 +185,9 @@ namespace zftp {
             return;
         }
         u.sendResponse(215, "UNIX"); //I couldn't figure out what to call to get this at runtime lol
+    }
+
+    void RETR(std::vector<std::string> args, User& u) {
+
     }
 }

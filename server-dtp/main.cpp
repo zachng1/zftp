@@ -12,6 +12,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <algorithm>
+#include <memory>
 
 //C Socket headers:
 #include <sys/types.h>
@@ -30,12 +31,12 @@
 std::vector<std::vector<std::string>> parsePICommands(int readFromPi);
 
 bool processCommand(std::vector<std::string> command, 
-std::unordered_map<int, zftp::DataConnection>& connections, 
+std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
 std::vector<struct pollfd>& pollfds);
 
 void processPollFd(struct pollfd pollfd, 
 std::vector<std::vector<std::string>>& commandsList,
-std::unordered_map<int, zftp::DataConnection>& connections,
+std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
 int readFromPi);
 
@@ -58,7 +59,7 @@ int main(int argc, char ** argv) {
     };
 
     std::vector<std::vector<std::string>> commandsList;
-    std::unordered_map<int, zftp::DataConnection> connections;
+    std::unordered_map<int, std::unique_ptr<zftp::DataConnection>> connections;
     std::vector<struct pollfd> completedConnections;
     try {
     while (poll(&pollfds[0], pollfds.size(), -1)) {
@@ -79,10 +80,14 @@ int main(int argc, char ** argv) {
         }
     }
     }
-    catch (std::runtime_error e) {
+    catch (const std::exception& e) {
         std::cout << e.what() << std::endl;
     }
-
+    catch (...) {
+        std::cout << "Unknown exception" << std::endl;
+    }
+    
+    std::cout << "Timeout??" << std::endl;
     return 0;
 }
 
@@ -106,7 +111,6 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
     else if ((end = readIn.find_last_of('|')) == readIn.npos) return result;
     
     readIn = readIn.substr(0, end);
-    std::cout << readIn << std::endl;
 
     //this splits a list of commands (separated on '|')
     //then subsequently each command into its various
@@ -131,7 +135,7 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
 }
 
 bool processCommand(std::vector<std::string> command, 
-std::unordered_map<int, zftp::DataConnection>& connections, 
+std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
 std::vector<struct pollfd>& pollfds) {
     int newConnectionFd = -1;
     struct pollfd newPollFd;
@@ -145,14 +149,16 @@ std::vector<struct pollfd>& pollfds) {
 
     newPollFd.fd = newConnectionFd;
     if (command[3].compare("D") == 0) {
-        zftp::DownloadConnection newDownload(newConnectionFd, command[1]);
-        connections[newConnectionFd] = newDownload; 
+        connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection>
+        (new zftp::DownloadConnection(newConnectionFd, command[1])); 
+        
         newPollFd.events = POLLOUT;
         
     }
     else if (command[3].compare("U") == 0) {
-        zftp::UploadConnection newUpload(newConnectionFd, command[1]);
-        connections[newConnectionFd] = newUpload;
+        connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection> 
+        (new zftp::UploadConnection(newConnectionFd, command[1]));
+
         newPollFd.events = POLLIN;
     }
     else return false;
@@ -163,15 +169,14 @@ std::vector<struct pollfd>& pollfds) {
 
 void processPollFd(struct pollfd pollfd, 
 std::vector<std::vector<std::string>>& commandsList,
-std::unordered_map<int, zftp::DataConnection>& connections,
+std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
 int readFromPi) {
     if (pollfd.revents & POLLIN && pollfd.fd == readFromPi) {
-                commandsList = parsePICommands(readFromPi);
-                std::cout << "PARSED COMMANDS ONCE" << std::endl;                
+                commandsList = parsePICommands(readFromPi);                
     }
     else if (pollfd.revents & POLLIN) {
-        if (connections[pollfd.fd].transferFile(255) == 0) {
+        if (connections[pollfd.fd]->transferFile(255) == 0) {
             shutdown(pollfd.fd, SHUT_RDWR);
             close(pollfd.fd);                    
             connections.erase(pollfd.fd);
@@ -179,7 +184,7 @@ int readFromPi) {
         }
     }
     else if (pollfd.revents & POLLOUT) {
-        if (connections[pollfd.fd].transferFile(255) == 0) {
+        if (connections[pollfd.fd]->transferFile(255) == 0) {
             shutdown(pollfd.fd, SHUT_RDWR);
             close(pollfd.fd);
             connections.erase(pollfd.fd);

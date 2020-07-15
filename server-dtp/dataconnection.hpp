@@ -21,9 +21,6 @@ namespace zftp{
 
 class DataConnection {
     public:
-    //Couldn't make it pure virtual since we need a map
-    //that uses it as a template
-    DataConnection(){throw std::runtime_error("Do not instantiate this class.");};
     virtual int transferFile(int bytes){};
 };
 

@@ -81,7 +81,6 @@ namespace zftp {
             command += std::to_string(ID);
             for (auto arg: DTPCommand) command += ":" + arg;
             command += "|";
-            std::cout << "Sent command to DTP ONCE" << std::endl;
             int bytesWritten, total = 0;
             while (total < command.size()) {
                 if ((bytesWritten = write(writeToDTP, command.c_str() + total, command.size() - total)) < 0) {

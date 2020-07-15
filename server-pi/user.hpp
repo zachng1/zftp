@@ -23,12 +23,15 @@
 namespace zftp{
     class User {
         public:
-        User(int fd, int port = 21);
+        User(int fd, int port = 20);
         int getDescriptor();
+        int getPort();
         std::string getName();
         void setName(std::string name);
         std::string getLastCommand();
         void setLastCommand(std::string command);
+        bool getPassive();
+        void setPassive(bool onOff);
 
 
         int sendResponse(uint code, std::string message="");
@@ -39,9 +42,11 @@ namespace zftp{
 
         private:
         int fd;
-        std::string username;
-        std::string lastCommand; // AKA the command currently being processed
         int port; //for passive connections
+        bool passive;
+        std::string username; //if this gets initialised, any changes cause weird memory errors ???
+        std::string lastCommand; // AKA the command currently being processed
+        
 
     };
 }

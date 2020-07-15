@@ -60,7 +60,7 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<std::string>> commandsList;
     std::unordered_map<int, zftp::DataConnection> connections;
     std::vector<struct pollfd> completedConnections;
-    
+    try {
     while (poll(&pollfds[0], pollfds.size(), -1)) {
         for (auto pollfd: pollfds) {
             processPollFd(pollfd, commandsList, connections, completedConnections, readFromPi);
@@ -78,26 +78,35 @@ int main(int argc, char ** argv) {
                     }));
         }
     }
+    }
+    catch (std::runtime_error e) {
+        std::cout << e.what() << std::endl;
+    }
 
     return 0;
 }
 
 //Call once poll signals there is data to read.
 std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
-    char buf[255];
+    char buf[255]{};
     std::string readIn;
     unsigned long end;
+    int bytesRead;
     std::vector<std::vector<std::string>> result;
 
     errno = 0;
-    while (read(readFromPi, buf, 255) != -1) {
+
+    while ((bytesRead = read(readFromPi, buf, 255)) != -1) {
+        buf[bytesRead] = '\0';
         readIn += std::string(buf);
     }
+    
     //error conditions --> return empty vector
     if (errno != EWOULDBLOCK || errno != EAGAIN) return result;
     else if ((end = readIn.find_last_of('|')) == readIn.npos) return result;
-
-    readIn = readIn.substr(end);
+    
+    readIn = readIn.substr(0, end);
+    std::cout << readIn << std::endl;
 
     //this splits a list of commands (separated on '|')
     //then subsequently each command into its various
@@ -158,7 +167,8 @@ std::unordered_map<int, zftp::DataConnection>& connections,
 std::vector<struct pollfd>& completedConnections,
 int readFromPi) {
     if (pollfd.revents & POLLIN && pollfd.fd == readFromPi) {
-                commandsList = parsePICommands(readFromPi);                
+                commandsList = parsePICommands(readFromPi);
+                std::cout << "PARSED COMMANDS ONCE" << std::endl;                
     }
     else if (pollfd.revents & POLLIN) {
         if (connections[pollfd.fd].transferFile(255) == 0) {

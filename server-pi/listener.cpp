@@ -79,14 +79,14 @@ namespace zftp {
             struct sockaddr_storage clientAddress{};
             socklen_t addrLength = sizeof(clientAddress);
             while (true) {
-                int newSocket;
+                int newSocket = -1;
                 if ((newSocket = accept4(listenerSocket, (struct sockaddr *) &clientAddress, &addrLength, SOCK_NONBLOCK)) == -1) {
                     throw std::runtime_error("Could not accept an incoming connection.");
                 }
                 else {
                     std::cout << "New client: " << newSocket << std::endl;
                     std::scoped_lock<std::shared_timed_mutex> lock(mutex);
-                    clientsList.emplace(newSocket, User(newSocket));
+                    clientsList.emplace(newSocket, zftp::User(newSocket));
                     //then signal to the handler that it needs to update it's
                     //pollfd struct
                     char fdBuf[64]{};

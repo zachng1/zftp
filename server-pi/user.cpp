@@ -4,13 +4,17 @@ namespace zftp {
     User::User(int fd, int port) : 
     fd{fd},
     port{port},
-    lastCommand{""}
+    passive{false},
+    lastCommand{""}  
     {
-
     }
 
     int User::getDescriptor() {
         return fd;
+    }
+
+    int User::getPort() {
+        return port;
     }
 
     std::string User::getName(){
@@ -26,6 +30,14 @@ namespace zftp {
     }
     void User::setLastCommand(std::string command) {
         lastCommand = command;
+    }
+
+    bool User::getPassive() {
+        return passive;
+    }
+    
+    void User::setPassive(bool onOff) {
+        passive = onOff;
     }
 
     std::vector<std::string> User::readMessage() {

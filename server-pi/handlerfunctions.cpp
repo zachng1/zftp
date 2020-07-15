@@ -3,7 +3,7 @@
 namespace zftp {
     // These are a number of helper functions for the main init handling method
     namespace {
-        std::vector<struct pollfd> createPollVector(std::unordered_map<int, User>& users, int selfPipeServerAlert, std::shared_timed_mutex& mutex) {
+        std::vector<struct pollfd> createPollVector(std::unordered_map<int, User>& users, int selfPipeServerAlert, int readFromDTP, std::shared_timed_mutex& mutex) {
             std::vector<struct pollfd> pollingVector;
 
             struct pollfd serverAlert;
@@ -11,6 +11,12 @@ namespace zftp {
             serverAlert.events = POLLIN;
             serverAlert.revents = 0;
             pollingVector.push_back(serverAlert);
+
+            struct pollfd DTPReadAlert;
+            DTPReadAlert.fd = readFromDTP;
+            DTPReadAlert.events = POLLIN;
+            DTPReadAlert.revents = 0;
+            pollingVector.push_back(DTPReadAlert);
             
             std::shared_lock<std::shared_timed_mutex> lock(mutex);
             for (auto user: users) { 
@@ -69,16 +75,32 @@ namespace zftp {
             }
             hangups.clear();
         }
+
+        int sendToDTP(std::vector<std::string> DTPCommand, int writeToDTP, int ID) {
+            std::string command;
+            command += std::to_string(ID);
+            for (auto arg: DTPCommand) command += ":" + arg;
+            command += "|";
+            std::cout << "Sent command to DTP ONCE" << std::endl;
+            int bytesWritten, total = 0;
+            while (total < command.size()) {
+                if ((bytesWritten = write(writeToDTP, command.c_str() + total, command.size() - total)) < 0) {
+                    return -1;
+                }
+                total += bytesWritten;
+            }
+            return 0;
+        }
     }
 
     void initHandling(bool& error, std::unordered_map<int, User>& users, std::shared_timed_mutex& usersMutex, int selfPipeServerAlert, int writeToDTP, int readFromDTP) {
-        int readyCount;
+        int readyCount, ID = 0;
         std::vector<struct pollfd> pollingVector;
         std::vector<struct pollfd> newFds;
         std::vector<struct pollfd> hangups;
         std::string newfdstring;
 
-        pollingVector = createPollVector(users, selfPipeServerAlert, usersMutex);  
+        pollingVector = createPollVector(users, selfPipeServerAlert, readFromDTP, usersMutex);  
 
         while (true) {
             if ((readyCount = poll(&pollingVector[0], pollingVector.size(), -1) < 0)) {
@@ -95,8 +117,12 @@ namespace zftp {
                         return;
                     }
                 }
+                else if (pollfd.revents & POLLIN && pollfd.fd == readFromDTP) {
+
+                }
                 else if (pollfd.revents & POLLIN) {
                     std::vector<std::string> message;
+                    std::vector<std::string> DTPCommand;
                     std::shared_lock<std::shared_timed_mutex> lock(usersMutex);
                     User& user = users.at(pollfd.fd);
                     message = user.readMessage();
@@ -104,16 +130,21 @@ namespace zftp {
                         hangups.push_back(pollfd);
                     }
                     else {
-                        //accesses the global commands dict
-                        //using the received command string as 
-                        //then calls that function with the current user
                         try {
                             std::cout << user.getName() << ": " << message[0] << std::endl;
-                            zftp::commands.at(message[0])(message, user);
+                            //use at instead of [] because commands is const
+                            DTPCommand = zftp::commands.at(message[0])(message, user);
                         }
                         catch (std::out_of_range &e) {
-                            user.sendResponse(500, "Command not recognised");
+                            user.sendResponse(500, "INTERNAL ERROR");
                         }
+                    }
+                    if (!DTPCommand.empty()) {
+                        if (sendToDTP(DTPCommand, writeToDTP, ID) < 0) {
+                            return;
+                        }
+                        DTPCommand.clear();
+                        ID < std::numeric_limits<int>::max() ? ++ID : ID = 0;
                     }
                 }
                 pollfd.revents = 0;
@@ -130,12 +161,9 @@ namespace zftp {
             }
         }
     }  
-    void UNIMPLEMENTED_ERROR(std::vector<std::string>, User& user) {
-        user.sendResponse(502, "Not implemented.");
-    }
 
 
-    extern const std::unordered_map<std::string, void (*)(std::vector<std::string>, User&)> commands{
+    extern const std::unordered_map<std::string, std::vector<std::string> (*)(std::vector<std::string>, User&)> commands{
         {std::string("USER"), USER},
         {std::string("PASS"), UNIMPLEMENTED_ERROR},
         {std::string("ACCT"), UNIMPLEMENTED_ERROR},
@@ -144,7 +172,7 @@ namespace zftp {
         {std::string("SMNT"), UNIMPLEMENTED_ERROR},
         {std::string("REIN"), UNIMPLEMENTED_ERROR},
         {std::string("QUIT"), UNIMPLEMENTED_ERROR},
-        {std::string("PORT"), UNIMPLEMENTED_ERROR},
+        {std::string("PORT"), PORT},
         {std::string("PASV"), UNIMPLEMENTED_ERROR},
         {std::string("MODE"), UNIMPLEMENTED_ERROR},
         {std::string("TYPE"), UNIMPLEMENTED_ERROR},
@@ -170,24 +198,66 @@ namespace zftp {
         {std::string("NOOP"), UNIMPLEMENTED_ERROR} 
     };
 
-    void USER(std::vector<std::string> args, User& u) {
+    std::vector<std::string> UNIMPLEMENTED_ERROR(std::vector<std::string>, User& user) {
+        user.sendResponse(502, "Not implemented.");
+        std::vector<std::string> empty;
+        return empty;
+    }    
+
+    std::vector<std::string> USER(std::vector<std::string> args, User& u) {
+        std::vector<std::string> empty;
         if (args.size() != 2) {
             u.sendResponse(501, "Invalid number of arguments");
-            return;
+            return empty;
         }
         u.setName(args[1]);
         u.sendResponse(230, "Logged in, continue");
+        return empty;
     }
 
-    void SYST(std::vector<std::string> args, User& u) {
+    std::vector<std::string> SYST(std::vector<std::string> args, User& u) {
+        std::vector<std::string> empty;
         if (args.size() != 1) {
             u.sendResponse(501, "Invalid number of arguments");
-            return;
+            return empty;
         }
         u.sendResponse(215, "UNIX"); //I couldn't figure out what to call to get this at runtime lol
+        return empty;
     }
 
-    void RETR(std::vector<std::string> args, User& u) {
+    std::vector<std::string> RETR(std::vector<std::string> args, User& u) {
+        std::vector<std::string> response;
+        //move this to DTP once uid enters the mix
+        if (access(args[1].c_str(), R_OK) != 0) {
+            return response;
+        }
+        response.push_back(args[1]);
+        if (u.getPassive()) {
+            response.push_back("P");
+            response.push_back("D");
+        }
+        else {
+            response.push_back("A");
+            response.push_back("D");
+            struct sockaddr_in addr;
+            socklen_t addr_size = sizeof(struct sockaddr_in);
+            getpeername(u.getDescriptor(), (struct sockaddr *)&addr, &addr_size);
+            std::string address(inet_ntoa(addr.sin_addr));
+            response.push_back(address);
+            response.push_back(std::to_string(u.getPort()));
+        }
+        return response;
+    }
 
+    std::vector<std::string> PORT(std::vector<std::string> args, User& u) {
+        std::vector<std::string> empty;
+        if (args.size() != 2) {
+            u.sendResponse(501, "Invalid number of arguments.");
+        }
+
+
+
+        u.sendResponse(200, "OKAY");
+        return empty;
     }
 }

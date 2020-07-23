@@ -37,7 +37,7 @@ int main() {
         char writeBuf[10], readBuf[10];
         snprintf(writeBuf, 10, "%d", writeToPI);
         snprintf(readBuf, 10, "%d", readFromPI);
-        argv[0] = (char*) "server-dtp/dtp";
+        argv[0] = (char *) "server-dtp/dtp";
         argv[1] = writeBuf;
         argv[2] = readBuf;
         argv[3] = (char *) nullptr;
@@ -58,7 +58,7 @@ int main() {
         char writeBuf[10], readBuf[10];
         snprintf(writeBuf, 10, "%d", writeToDTP);
         snprintf(readBuf, 10, "%d", readFromDTP);
-        argv[0] = (char*) "server-pi/pi";
+        argv[0] = (char *) "server-pi/pi";
         argv[1] = writeBuf;
         argv[2] = readBuf;
         argv[3] = (char *) nullptr;

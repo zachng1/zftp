@@ -19,6 +19,7 @@
 
 #include "listener.hpp"
 #include "user.hpp"
+#include "../utilities.hpp"
 
 namespace zftp {
     //Main handling loop function. Handles polling existing users and calling the correct method when a command comes in.

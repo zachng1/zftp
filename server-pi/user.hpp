@@ -26,6 +26,7 @@ namespace zftp{
         User(int fd, int port = 20);
         int getDescriptor();
         int getPort();
+        void setPort(int newPort);
         std::string getName();
         void setName(std::string name);
         std::string getLastCommand();

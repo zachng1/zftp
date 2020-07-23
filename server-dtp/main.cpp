@@ -32,24 +32,29 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi);
 
 bool processCommand(std::vector<std::string> command, 
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
-std::vector<struct pollfd>& pollfds);
+std::vector<struct pollfd>& pollfds,
+std::unordered_map<int, int> fdToID);
 
 void processPollFd(struct pollfd pollfd, 
+std::unordered_map<int, int> fdToID,
 std::vector<std::vector<std::string>>& commandsList,
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
-int readFromPi);
+int readFromPi, int writeToPi);
 
 int main(int argc, char ** argv) {
+
     int writeToPi = std::stoi(std::string(argv[1]));
     int readFromPi = std::stoi(std::string(argv[2]));
-    
+
     std::vector<struct pollfd> pollfds;
+    std::unordered_map<int, int> fdToID;
     struct pollfd readFromPiPollfd;
     readFromPiPollfd.fd = readFromPi;
     readFromPiPollfd.events = POLLIN;
     readFromPiPollfd.revents = 0;
     pollfds.push_back(readFromPiPollfd);
+    
 
     //signal to PI that we are ready to start sending and recieving data
     char readyBuf[1]{'A'};
@@ -63,31 +68,34 @@ int main(int argc, char ** argv) {
     std::vector<struct pollfd> completedConnections;
     try {
     while (poll(&pollfds[0], pollfds.size(), -1)) {
-        for (auto pollfd: pollfds) {
-            processPollFd(pollfd, commandsList, connections, completedConnections, readFromPi);
+        for (auto pair: pollfds) {
+            processPollFd(pair, fdToID, commandsList, connections, completedConnections, readFromPi, writeToPi);
         }
         for (auto command: commandsList) {
-            if (!processCommand(command, connections, pollfds)) {
+            if (!processCommand(command, connections, pollfds, fdToID)) {
+                std::cout << "Error with command" << std::endl;
                 //write a message back to PI with id and error
                 //something like send(writeToPi, "ERROR ON COMMAND: %d", command[0], 0000 etc.)
                 //obviously fprint to the send buf first
             }      
-        }  
+        }
         for (auto completion: completedConnections) {
             pollfds.erase(std::find_if(pollfds.begin(), pollfds.end(), [completion](auto j){
                     return completion.fd == j.fd;
                     }));
         }
+        completedConnections.clear();
+        commandsList.clear();
     }
     }
     catch (const std::exception& e) {
-        std::cout << e.what() << std::endl;
+        std::cout << "Exception: " << e.what() << std::endl;
     }
     catch (...) {
         std::cout << "Unknown exception" << std::endl;
     }
     
-    std::cout << "Timeout??" << std::endl;
+    std::cout << "Exit normal" << std::endl;
     return 0;
 }
 
@@ -129,6 +137,7 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
         }
         result.push_back(curCommand);
     }
+    
 
     return result;
 
@@ -136,7 +145,9 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
 
 bool processCommand(std::vector<std::string> command, 
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
-std::vector<struct pollfd>& pollfds) {
+std::vector<struct pollfd>& pollfds,
+std::unordered_map<int, int> fdToID) {
+    
     int newConnectionFd = -1;
     struct pollfd newPollFd;
     if (command[2].compare("A") == 0) {
@@ -150,8 +161,8 @@ std::vector<struct pollfd>& pollfds) {
     newPollFd.fd = newConnectionFd;
     if (command[3].compare("D") == 0) {
         connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection>
-        (new zftp::DownloadConnection(newConnectionFd, command[1])); 
-        
+        (new zftp::DownloadConnection(newConnectionFd, command[1]));
+
         newPollFd.events = POLLOUT;
         
     }
@@ -164,16 +175,18 @@ std::vector<struct pollfd>& pollfds) {
     else return false;
     newPollFd.revents = 0;
     pollfds.push_back(newPollFd);
+    fdToID[newPollFd.fd] = std::stoi(command[0]);
     return true;
 }
 
 void processPollFd(struct pollfd pollfd, 
+std::unordered_map<int, int> fdToID,
 std::vector<std::vector<std::string>>& commandsList,
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
-int readFromPi) {
+int readFromPi, int writeToPi) {
     if (pollfd.revents & POLLIN && pollfd.fd == readFromPi) {
-                commandsList = parsePICommands(readFromPi);                
+        commandsList = parsePICommands(readFromPi);      
     }
     else if (pollfd.revents & POLLIN) {
         if (connections[pollfd.fd]->transferFile(255) == 0) {
@@ -184,12 +197,24 @@ int readFromPi) {
         }
     }
     else if (pollfd.revents & POLLOUT) {
-        if (connections[pollfd.fd]->transferFile(255) == 0) {
-            shutdown(pollfd.fd, SHUT_RDWR);
-            close(pollfd.fd);
-            connections.erase(pollfd.fd);
-            completedConnections.push_back(pollfd);
+        int wrote;
+        if ((wrote = connections[pollfd.fd]->transferFile(255)) <= 0) {
+            std::cout << "Close connection" << std::endl;
+            if (errno == EAGAIN) std::cout << "EAGAIN" << std::endl;
+            else {
+                std::cout << "ERRNO = " << errno << std::endl; 
+                shutdown(pollfd.fd, SHUT_RDWR);
+                close(pollfd.fd);
+                connections.erase(pollfd.fd);
+                completedConnections.push_back(pollfd);
+                if (wrote == 0) {
+                    std::string responseToPi = std::to_string(fdToID[pollfd.fd]) + "|";
+                    write(writeToPi, responseToPi.c_str(), responseToPi.size());
+                    fdToID.erase(pollfd.fd);
+                }
+            }
         }
+        std::cout << "POLLOUT _ SEND DATA: " << wrote << std::endl;
     }
     pollfd.revents = 0;
 }

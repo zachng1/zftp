@@ -32,14 +32,7 @@ int main(int argc, char * argv[]) {
     flags = fcntl(serverPipe[0], F_GETFL, 0);
     fcntl(serverPipe[0], F_SETFL, flags | O_NONBLOCK);
     
-    //begin the thread that will poll existing clients
-    //and process commands and responses.
-    bool handlerError = false;
-    std::thread handlerThread{&zftp::initHandling,
-    std::ref(handlerError),
-    std::ref(globalClientsList),
-    std::ref(globalClientsListMutex),
-    serverPipe[0], writeToDTP, readFromDTP};
+
 
     
     zftp::Listener listener;
@@ -58,6 +51,15 @@ int main(int argc, char * argv[]) {
             return 1;
         }
     }
+
+    //begin the thread that will poll existing clients
+    //and process commands and responses.
+    bool handlerError = false;
+    std::thread handlerThread{&zftp::initHandling,
+    std::ref(handlerError),
+    std::ref(globalClientsList),
+    std::ref(globalClientsListMutex),
+    serverPipe[0], writeToDTP, readFromDTP};
 
     listener.addListener(serverPipe[1], globalClientsList, globalClientsListMutex);
     

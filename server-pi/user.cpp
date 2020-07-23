@@ -17,6 +17,10 @@ namespace zftp {
         return port;
     }
 
+    void User::setPort(int newPort) {
+        port = newPort;
+    }
+
     std::string User::getName(){
         return username;
     }

@@ -10,7 +10,7 @@ int DownloadConnection::transferFile(int bytes) {
     int bytesSent, total = 0;
     //read exactly bytes into buf
     while (total < bytes) {
-        if ((bytesSent = read(fileSocket, buf, bytes - total)) == 0) {
+        if ((bytesSent = read(fileSocket, buf, bytes - total)) <= 0) {
             break;
         }
         total += bytesSent;
@@ -19,7 +19,13 @@ int DownloadConnection::transferFile(int bytes) {
     buf = bufstart;
     if (total == 0) {
         free(buf);
+        resetDescriptor();
         return total;
+    }
+    else if (bytesSent == -1) {
+        free(buf);
+        resetDescriptor();
+        return bytesSent;
     }
     int writeTotal = 0;
     //write exactly bytes to fd
@@ -28,6 +34,7 @@ int DownloadConnection::transferFile(int bytes) {
         if ((bytesSent = write(fd, buf, bytes - writeTotal)) < 0 && errno != EAGAIN) {
             buf = bufstart;
             free(buf);
+            resetDescriptor();
             return bytesSent;
         }
         if (bytesSent == 0) {
@@ -40,11 +47,18 @@ int DownloadConnection::transferFile(int bytes) {
     free(buf);
     return writeTotal;
 }
+bool DownloadConnection::resetDescriptor() {
+    if (lseek(fileSocket, 0, SEEK_SET) != 0) return false;
+    else return true;
+}
 
 UploadConnection::UploadConnection(int fd, std::string path) {
     fileSocket = open(path.c_str(), O_WRONLY | O_CREAT);
 }
 int UploadConnection::transferFile(int bytes) {
+
+}
+bool UploadConnection::resetDescriptor() {
 
 }
 

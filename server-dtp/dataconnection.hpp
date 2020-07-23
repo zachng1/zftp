@@ -22,12 +22,14 @@ namespace zftp{
 class DataConnection {
     public:
     virtual int transferFile(int bytes){};
+    virtual bool resetDescriptor(){};
 };
 
 class UploadConnection : public DataConnection {
     public:
     UploadConnection(int fd, std::string path);
     int transferFile(int bytes);
+    bool resetDescriptor();
 
     private:
     int fd;
@@ -38,6 +40,7 @@ class DownloadConnection : public DataConnection {
     public:
     DownloadConnection(int fd, std::string path);
     int transferFile(int bytes);
+    bool resetDescriptor();
 
     private:
     int fd;

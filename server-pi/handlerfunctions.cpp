@@ -93,11 +93,12 @@ namespace zftp {
     }
 
     void initHandling(bool& error, std::unordered_map<int, User>& users, std::shared_timed_mutex& usersMutex, int selfPipeServerAlert, int writeToDTP, int readFromDTP) {
-        int readyCount, ID = 0;
+        int readyCount, ID = 1; //reserve 0 for communication pipe for the DTP connection
         std::vector<struct pollfd> pollingVector;
         std::vector<struct pollfd> newFds;
         std::vector<struct pollfd> hangups;
         std::string newfdstring;
+        std::unordered_map<int, User *> ongoingConnections;
 
         pollingVector = createPollVector(users, selfPipeServerAlert, readFromDTP, usersMutex);  
 
@@ -117,7 +118,18 @@ namespace zftp {
                     }
                 }
                 else if (pollfd.revents & POLLIN && pollfd.fd == readFromDTP) {
-
+                    char buf[255];
+                    if (read(readFromDTP, buf, 255) < 0) {
+                        error = true;
+                        return;
+                    }
+                    buf[255] = '\0';
+                    std::string IDString = std::string(buf);
+                    IDString = IDString.substr(IDString.find('|'));
+                    std::cout << "Completed ID:" << IDString << std::endl;
+                    int completedID = std::stoi(IDString);
+                    ongoingConnections[completedID]->sendResponse(226, "Download Complete");
+                    ongoingConnections.erase(completedID);
                 }
                 else if (pollfd.revents & POLLIN) {
                     std::vector<std::string> message;
@@ -142,8 +154,9 @@ namespace zftp {
                         if (sendToDTP(DTPCommand, writeToDTP, ID) < 0) {
                             return;
                         }
+                        ongoingConnections[ID] = &user;
                         DTPCommand.clear();
-                        ID < std::numeric_limits<int>::max() ? ++ID : ID = 0;
+                        ID < std::numeric_limits<int>::max() ? ++ID : ID = 1;
                     }
                 }
                 pollfd.revents = 0;
@@ -245,6 +258,7 @@ namespace zftp {
             response.push_back(address);
             response.push_back(std::to_string(u.getPort()));
         }
+        u.sendResponse(150, "Beginning transfer");
         return response;
     }
 
@@ -253,9 +267,15 @@ namespace zftp {
         if (args.size() != 2) {
             u.sendResponse(501, "Invalid number of arguments.");
         }
-
-
-
+        std::vector<std::string> networkInfo = stringSplit(args[1], ",");
+        uint8_t low, high;
+        //add error check here in case of bad client
+        low =  std::stoi(networkInfo[5].c_str());
+        high =  std::stoi(networkInfo[4].c_str());
+        std::cout << (int) high << ":" << (int) low << std::endl;
+        uint16_t port = ((uint16_t) high << 8) | low;
+        u.setPort(port);
+        std::cout << "Set port to:" << u.getPort() << std::endl;
         u.sendResponse(200, "OKAY");
         return empty;
     }

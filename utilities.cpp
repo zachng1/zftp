@@ -1,5 +1,6 @@
 #include "utilities.hpp"
 
+namespace ZUtil{
 std::vector<std::string> stringSplit(std::string string, std::string delim) {
     std::vector<std::string> result;
     std::string token;
@@ -14,4 +15,5 @@ std::vector<std::string> stringSplit(std::string string, std::string delim) {
         string = string.substr(pos+1);
     }
     return result;
+}
 }

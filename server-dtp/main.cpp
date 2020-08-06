@@ -25,6 +25,7 @@
 #include <poll.h>
 
 #include "dataconnection.hpp"
+#include "../utilities.hpp"
 
 //Function declarations
 
@@ -33,10 +34,10 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi);
 bool processCommand(std::vector<std::string> command, 
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
 std::vector<struct pollfd>& pollfds,
-std::unordered_map<int, int> fdToID);
+std::unordered_map<int, int>& fdToID);
 
 void processPollFd(struct pollfd pollfd, 
-std::unordered_map<int, int> fdToID,
+std::unordered_map<int, int>& fdToID,
 std::vector<std::vector<std::string>>& commandsList,
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
@@ -125,20 +126,12 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
     //args (separated on ':') -- 
     //as defined in "PI->DTP command formats.txt"
     std::vector<std::string> commands, curCommand;
-    std::string command, arg;
-    std::istringstream stream{readIn};
-    while (std::getline(stream, command, '|')) {
-        commands.push_back(command);
-    }
+    commands = ZUtil::stringSplit(readIn, "|");
+    std::string arg;
     for (auto command: commands) {
-        stream = std::istringstream{command};
-        while (std::getline(stream, arg, ':')) {
-            curCommand.push_back(arg);
-        }
+        curCommand = ZUtil::stringSplit(command, ":");
         result.push_back(curCommand);
     }
-    
-
     return result;
 
 }
@@ -146,7 +139,7 @@ std::vector<std::vector<std::string>> parsePICommands(int readFromPi) {
 bool processCommand(std::vector<std::string> command, 
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections, 
 std::vector<struct pollfd>& pollfds,
-std::unordered_map<int, int> fdToID) {
+std::unordered_map<int, int>& fdToID) {
     
     int newConnectionFd = -1;
     struct pollfd newPollFd;
@@ -180,7 +173,7 @@ std::unordered_map<int, int> fdToID) {
 }
 
 void processPollFd(struct pollfd pollfd, 
-std::unordered_map<int, int> fdToID,
+std::unordered_map<int, int>& fdToID,
 std::vector<std::vector<std::string>>& commandsList,
 std::unordered_map<int, std::unique_ptr<zftp::DataConnection>>& connections,
 std::vector<struct pollfd>& completedConnections,
@@ -200,9 +193,8 @@ int readFromPi, int writeToPi) {
         int wrote;
         if ((wrote = connections[pollfd.fd]->transferFile(255)) <= 0) {
             std::cout << "Close connection" << std::endl;
-            if (errno == EAGAIN) std::cout << "EAGAIN" << std::endl;
+            if (errno == EAGAIN);
             else {
-                std::cout << "ERRNO = " << errno << std::endl; 
                 shutdown(pollfd.fd, SHUT_RDWR);
                 close(pollfd.fd);
                 connections.erase(pollfd.fd);
@@ -214,7 +206,6 @@ int readFromPi, int writeToPi) {
                 }
             }
         }
-        std::cout << "POLLOUT _ SEND DATA: " << wrote << std::endl;
     }
     pollfd.revents = 0;
 }

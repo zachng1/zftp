@@ -125,7 +125,7 @@ namespace zftp {
                     }
                     buf[255] = '\0';
                     std::string IDString = std::string(buf);
-                    IDString = IDString.substr(IDString.find('|'));
+                    IDString = IDString.substr(0, IDString.find('|'));
                     std::cout << "Completed ID:" << IDString << std::endl;
                     int completedID = std::stoi(IDString);
                     ongoingConnections[completedID]->sendResponse(226, "Download Complete");
@@ -267,7 +267,7 @@ namespace zftp {
         if (args.size() != 2) {
             u.sendResponse(501, "Invalid number of arguments.");
         }
-        std::vector<std::string> networkInfo = stringSplit(args[1], ",");
+        std::vector<std::string> networkInfo = ZUtil::stringSplit(args[1], ",");
         uint8_t low, high;
         //add error check here in case of bad client
         low =  std::stoi(networkInfo[5].c_str());

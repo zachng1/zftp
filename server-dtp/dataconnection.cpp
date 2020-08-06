@@ -31,7 +31,7 @@ int DownloadConnection::transferFile(int bytes) {
     //write exactly bytes to fd
     while (writeTotal < total) {
         errno = 0;
-        if ((bytesSent = write(fd, buf, bytes - writeTotal)) < 0 && errno != EAGAIN) {
+        if ((bytesSent = write(fd, buf, total - writeTotal)) < 0 && errno != EAGAIN) {
             buf = bufstart;
             free(buf);
             resetDescriptor();

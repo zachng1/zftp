@@ -16,4 +16,9 @@ std::vector<std::string> stringSplit(std::string string, std::string delim) {
     }
     return result;
 }
+
+bool endsWith(std::string string, std::string token) {
+    if (string.substr(string.length() - token.length()) != token) return false;
+    else return true;
+}
 }

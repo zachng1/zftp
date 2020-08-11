@@ -43,33 +43,36 @@ std::unordered_map<int, int>& fdToID) {
     
     int newConnectionFd = -1;
     struct pollfd newPollFd;
-    if (command[2].compare("A") == 0) {
-        newConnectionFd = zftp::getActiveConnectionFd(command);
-    }
-    else if (command[2].compare("P") == 0) {
+    //this needs special treatment, as we start listening then get a connection much later
+    if (command[1].compare("P") == 0) {
+        //do something wacky
         newConnectionFd = zftp::getPassiveConnectionFd(command);
+        return false;
     }
-    if (newConnectionFd == -1) return false;
+    else {
+        newConnectionFd = zftp::getActiveConnectionFd(command);
+        if (newConnectionFd == -1) return false;
 
-    newPollFd.fd = newConnectionFd;
-    if (command[3].compare("D") == 0) {
-        connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection>
-        (new zftp::DownloadConnection(newConnectionFd, command[1]));
+        newPollFd.fd = newConnectionFd;
+        if (command[2].compare("D") == 0) {
+            connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection>
+            (new zftp::DownloadConnection(newConnectionFd, command[1]));
 
-        newPollFd.events = POLLOUT;
-        
+            newPollFd.events = POLLOUT;
+            
+        }
+        else if (command[2].compare("U") == 0) {
+            connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection> 
+            (new zftp::UploadConnection(newConnectionFd, command[1]));
+
+            newPollFd.events = POLLIN;
+        }
+        else return false;
+        newPollFd.revents = 0;
+        pollfds.push_back(newPollFd);
+        fdToID[newPollFd.fd] = std::stoi(command[0]);
+        return true;
     }
-    else if (command[3].compare("U") == 0) {
-        connections[newConnectionFd] = std::unique_ptr<zftp::DataConnection> 
-        (new zftp::UploadConnection(newConnectionFd, command[1]));
-
-        newPollFd.events = POLLIN;
-    }
-    else return false;
-    newPollFd.revents = 0;
-    pollfds.push_back(newPollFd);
-    fdToID[newPollFd.fd] = std::stoi(command[0]);
-    return true;
 }
 
 void processPollFd(struct pollfd pollfd, 

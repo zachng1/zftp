@@ -34,6 +34,7 @@ namespace zftp {
     std::vector<std::string> SYST(std::vector<std::string> args, User& u);
     std::vector<std::string> RETR(std::vector<std::string> args, User& u);
     std::vector<std::string> PORT(std::vector<std::string> args, User& u);
+    std::vector<std::string> PASV(std::vector<std::string> args, User& u);
 }   
 
 #endif

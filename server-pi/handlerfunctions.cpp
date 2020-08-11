@@ -124,12 +124,21 @@ namespace zftp {
                         return;
                     }
                     buf[255] = '\0';
-                    std::string IDString = std::string(buf);
-                    IDString = IDString.substr(0, IDString.find('|'));
-                    std::cout << "Completed ID:" << IDString << std::endl;
-                    int completedID = std::stoi(IDString);
-                    ongoingConnections[completedID]->sendResponse(226, "Download Complete");
-                    ongoingConnections.erase(completedID);
+                    std::string MessageString = std::string(buf);
+                    MessageString = MessageString.substr(0, MessageString.find('|'));
+                    if (ZUtil::endsWith(MessageString, "PASV")) {
+                        MessageString = MessageString.substr(0, MessageString.find("PASV"));
+                        std::string IDstring = MessageString.substr(0, MessageString.find(':'));
+                        MessageString = MessageString.substr(MessageString.find(':') + 1);
+                        int PASVID = std::stoi(IDstring);
+                        ongoingConnections[PASVID]->sendResponse(227, MessageString);
+                    }
+                    else {
+                        std::cout << "Completed ID:" << MessageString << std::endl;
+                        int completedID = std::stoi(MessageString);
+                        ongoingConnections[completedID]->sendResponse(226, "Download Complete");
+                        ongoingConnections.erase(completedID);
+                    }
                 }
                 else if (pollfd.revents & POLLIN) {
                     std::vector<std::string> message;
@@ -239,25 +248,18 @@ namespace zftp {
 
     std::vector<std::string> RETR(std::vector<std::string> args, User& u) {
         std::vector<std::string> response;
-        //move this to DTP once uid enters the mix
+        //move this to DTP once uid & jail enters the mix
         if (access(args[1].c_str(), R_OK) != 0) {
             return response;
         }
         response.push_back(args[1]);
-        if (u.getPassive()) {
-            response.push_back("P");
-            response.push_back("D");
-        }
-        else {
-            response.push_back("A");
-            response.push_back("D");
-            struct sockaddr_in addr;
-            socklen_t addr_size = sizeof(struct sockaddr_in);
-            getpeername(u.getDescriptor(), (struct sockaddr *)&addr, &addr_size);
-            std::string address(inet_ntoa(addr.sin_addr));
-            response.push_back(address);
-            response.push_back(std::to_string(u.getPort()));
-        }
+        response.push_back("D");
+        struct sockaddr_in addr;
+        socklen_t addr_size = sizeof(struct sockaddr_in);
+        getpeername(u.getDescriptor(), (struct sockaddr *)&addr, &addr_size);
+        std::string address(inet_ntoa(addr.sin_addr));
+        response.push_back(address);
+        response.push_back(std::to_string(u.getPort()));
         u.sendResponse(150, "Beginning transfer");
         return response;
     }
@@ -275,8 +277,13 @@ namespace zftp {
         std::cout << (int) high << ":" << (int) low << std::endl;
         uint16_t port = ((uint16_t) high << 8) | low;
         u.setPort(port);
-        std::cout << "Set port to:" << u.getPort() << std::endl;
         u.sendResponse(200, "OKAY");
         return empty;
+    }
+
+    std::vector<std::string> PASV(std::vector<std::string> args, User& u) {
+        std::vector<std::string> response;
+        u.setPassive(true);
+        response.push_back("P");
     }
 }

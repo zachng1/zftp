@@ -43,14 +43,12 @@ int main(int argc, char ** argv) {
     readFromPiPollfd.revents = 0;
     pollfds.push_back(readFromPiPollfd);
     
-
     //signal to PI that we are ready to start sending and recieving data
     char readyBuf[1]{'A'};
     if (write(writeToPi, readyBuf, 1) < 0) {
         std::cout << "Error signalling PI" << std::endl;
         return 1;
     };
-
     std::vector<std::vector<std::string>> commandsList;
     std::unordered_map<int, std::unique_ptr<zftp::DataConnection>> connections;
     std::vector<struct pollfd> completedConnections;
@@ -82,8 +80,6 @@ int main(int argc, char ** argv) {
     catch (...) {
         std::cout << "Unknown exception" << std::endl;
     }
-    
     std::cout << "Exit normal" << std::endl;
     return 0;
 }
-
